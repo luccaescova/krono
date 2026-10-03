@@ -117,9 +117,18 @@ class _TelaLoginState extends State<TelaLogin> {
                         // Utilização correta da imagem do logótipo a partir da pasta images/
                         Center(
                           child: Image.asset(
-                            'images/logo.png',
+                            'assets/images/logo.png',
                             width: 64,
                             height: 64,
+                            fit: BoxFit.contain,
+                            errorBuilder: (context, error, stackTrace) {
+                              debugPrint('Erro ao carregar o logo: $error');
+
+                              return const Icon(
+                                Icons.broken_image_outlined,
+                                size: 64,
+                              );
+                            },
                           ),
                         ),
                         const SizedBox(height: 20),

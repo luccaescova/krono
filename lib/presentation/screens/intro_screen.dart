@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'login_screen.dart'; // Certifique-se de importar o arquivo de login
+import 'login_screen.dart';
 
 const Color kronoBlue = Color(0xFF003CA5);
 const Color kronoText = Color(0xFF111827);
@@ -20,24 +20,23 @@ class TelaInicial extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const SizedBox(height: 40),
+
+                // Logo carregado da imagem real
                 const LogoKrono(tamanho: 112),
+
                 const SizedBox(height: 20),
-                const Text(
-                  'krono',
-                  style: TextStyle(
-                    fontSize: 42,
-                    fontWeight: FontWeight.bold,
-                    color: kronoText,
-                    letterSpacing: -1.5,
-                  ),
-                ),
+
                 const SizedBox(height: 12),
+
                 const Text(
                   'Organize seu tempo do seu jeito',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 16, color: kronoMuted),
                 ),
+
                 const SizedBox(height: 56),
+
+                // Botão Criar Conta
                 SizedBox(
                   width: double.infinity,
                   height: 54,
@@ -65,7 +64,10 @@ class TelaInicial extends StatelessWidget {
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 16),
+
+                // Botão Entrar
                 SizedBox(
                   width: double.infinity,
                   height: 54,
@@ -91,6 +93,7 @@ class TelaInicial extends StatelessWidget {
                     ),
                   ),
                 ),
+
                 const SizedBox(height: 40),
               ],
             ),
@@ -101,6 +104,7 @@ class TelaInicial extends StatelessWidget {
   }
 }
 
+// Widget que exibe o arquivo de imagem do logo
 class LogoKrono extends StatelessWidget {
   final double tamanho;
 
@@ -111,56 +115,21 @@ class LogoKrono extends StatelessWidget {
     return SizedBox(
       width: tamanho,
       height: tamanho,
-      child: CustomPaint(painter: LogoKronoPainter()),
+      child: Image.asset(
+        'assets/images/logo_with_text_down.png',
+        width: tamanho,
+        height: tamanho,
+        fit: BoxFit.contain,
+        errorBuilder: (context, error, stackTrace) {
+          debugPrint('Erro ao carregar logo_with_text_down.png: $error');
+
+          return const Icon(
+            Icons.broken_image_outlined,
+            size: 48,
+            color: kronoBlue,
+          );
+        },
+      ),
     );
   }
-}
-
-class LogoKronoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double s = size.width / 100;
-
-    final Paint azul = Paint()
-      ..color = kronoBlue
-      ..style = PaintingStyle.fill;
-
-    final Paint branco = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 7 * s
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    canvas.drawCircle(
-      Offset(size.width / 2, size.height / 2),
-      size.width / 2,
-      azul,
-    );
-
-    final Path k = Path()
-      ..moveTo(34 * s, 25 * s)
-      ..lineTo(34 * s, 75 * s)
-      ..moveTo(34 * s, 51 * s)
-      ..lineTo(66 * s, 28 * s)
-      ..moveTo(43 * s, 45 * s)
-      ..lineTo(67 * s, 73 * s);
-
-    canvas.drawPath(k, branco);
-
-    final Paint detalhe = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-
-    final Path seta = Path()
-      ..moveTo(59 * s, 23 * s)
-      ..lineTo(75 * s, 23 * s)
-      ..lineTo(75 * s, 39 * s)
-      ..close();
-
-    canvas.drawPath(seta, detalhe);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
