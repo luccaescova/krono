@@ -15,31 +15,41 @@ class TelaInicial extends StatelessWidget {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
+            padding: const EdgeInsets.symmetric(horizontal: 34),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const SizedBox(height: 40),
+                const SizedBox(height: 5),
 
-                // Logo carregado da imagem real
-                const LogoKrono(tamanho: 112),
+                // =========================
+                // LOGO KRONO
+                // =========================
+                const LogoKrono(),
 
-                const SizedBox(height: 20),
+                // Espaço menor entre o logo e o texto
+                const SizedBox(height: 8),
 
-                const SizedBox(height: 12),
-
+                // =========================
+                // FRASE
+                // =========================
                 const Text(
                   'Organize seu tempo do seu jeito',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 16, color: kronoMuted),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w500,
+                    color: kronoMuted,
+                  ),
                 ),
 
-                const SizedBox(height: 56),
+                const SizedBox(height: 78),
 
-                // Botão Criar Conta
+                // =========================
+                // BOTÃO CRIAR CONTA
+                // =========================
                 SizedBox(
                   width: double.infinity,
-                  height: 54,
+                  height: 68,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kronoBlue,
@@ -51,50 +61,62 @@ class TelaInicial extends StatelessWidget {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const TelaLogin(criarConta: true),
+                          builder: (context) {
+                            return const TelaLogin(
+                              criarConta: true,
+                            );
+                          },
                         ),
                       );
                     },
                     child: const Text(
                       'Criar Conta',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 18,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
 
-                // Botão Entrar
+                // =========================
+                // BOTÃO ENTRAR
+                // =========================
                 SizedBox(
                   width: double.infinity,
-                  height: 54,
+                  height: 68,
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
                       foregroundColor: kronoText,
                       backgroundColor: Colors.white,
-                      side: const BorderSide(color: Color(0xFFE0E3E8)),
+                      side: const BorderSide(
+                        color: Color(0xFFE0E3E8),
+                      ),
                       shape: const StadiumBorder(),
                     ),
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const TelaLogin()),
+                        MaterialPageRoute(
+                          builder: (context) {
+                            return const TelaLogin();
+                          },
+                        ),
                       );
                     },
                     child: const Text(
                       'Entrar',
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 18,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                 ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 30),
               ],
             ),
           ),
@@ -104,28 +126,32 @@ class TelaInicial extends StatelessWidget {
   }
 }
 
-// Widget que exibe o arquivo de imagem do logo
-class LogoKrono extends StatelessWidget {
-  final double tamanho;
+// ======================================================
+// LOGO KRONO
+// ======================================================
 
-  const LogoKrono({super.key, this.tamanho = 56});
+class LogoKrono extends StatelessWidget {
+  const LogoKrono({super.key});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: tamanho,
-      height: tamanho,
+      width: 360,
+      height: 360,
       child: Image.asset(
         'assets/images/logo_with_text_down.png',
-        width: tamanho,
-        height: tamanho,
+        width: 360,
+        height: 360,
         fit: BoxFit.contain,
+        alignment: Alignment.center,
         errorBuilder: (context, error, stackTrace) {
-          debugPrint('Erro ao carregar logo_with_text_down.png: $error');
+          debugPrint(
+            'Erro ao carregar logo_with_text_down.png: $error',
+          );
 
           return const Icon(
             Icons.broken_image_outlined,
-            size: 48,
+            size: 80,
             color: kronoBlue,
           );
         },
