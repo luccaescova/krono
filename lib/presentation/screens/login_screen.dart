@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Importação do Firebase Auth
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Importação do Cloud Firestore
 import 'main_navigation_screen.dart';
 
 class AppColors {
@@ -81,7 +82,7 @@ class _TelaLoginState extends State<TelaLogin> {
       final email = _emailController.text.trim();
       final senha = _senhaController.text;
 
-      // Autenticação real com o Firebase
+      // Autenticação real com o Firebase[cite: 4]
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
         password: senha,
@@ -125,7 +126,7 @@ class _TelaLoginState extends State<TelaLogin> {
   }
 
   // ============================================================
-  // CRIAR CONTA (FIREBASE)
+  // CRIAR CONTA (FIREBASE + FIRESTORE)
   // ============================================================
 
   Future<void> _criarNovaConta() async {
@@ -153,16 +154,28 @@ class _TelaLoginState extends State<TelaLogin> {
     try {
       final email = _emailController.text.trim();
       final senha = _senhaController.text;
+      final nome = _nomeController.text.trim();
+      final dataNascimento = _dataNascimentoController.text.trim();
 
-      // Criação real de conta no Firebase
+      // 1. Criação de conta no Firebase Authentication[cite: 4]
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(email: email, password: senha);
 
-      // Atualiza o nome de exibição do utilizador se preenchido
-      if (_nomeController.text.trim().isNotEmpty) {
-        await userCredential.user?.updateDisplayName(
-          _nomeController.text.trim(),
-        );
+      final user = userCredential.user;
+
+      if (user != null) {
+        // 2. Atualiza o nome de exibição no Auth[cite: 4]
+        if (nome.isNotEmpty) {
+          await user.updateDisplayName(nome);
+        }
+
+        // 3. Salva automaticamente os dados do utilizador no Cloud Firestore
+        await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+          'nome': nome,
+          'email': email,
+          'dataNascimento': dataNascimento,
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       }
 
       if (!mounted) return;
@@ -192,6 +205,14 @@ class _TelaLoginState extends State<TelaLogin> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(mensagemErro), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro inesperado: $e'),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       if (mounted) {

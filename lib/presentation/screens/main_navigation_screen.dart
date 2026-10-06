@@ -1,8 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
 import 'progress_screen.dart';
 import 'history_screen.dart';
 import 'profile_screen.dart';
+import 'login_screen.dart'; //[cite: 5]
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -19,18 +21,41 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     const ProgressScreen(),
     const HistoryScreen(),
     const ProfileScreen(),
-  ];
+  ]; //[cite: 5]
+
+  // Função centralizada para encerrar a sessão e limpar o histórico de navegação
+  Future<void> _sairDaConta() async {
+    try {
+      await FirebaseAuth.instance.signOut();
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const TelaLogin(criarConta: false)),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao sair da conta: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Verifica se está na aba de Perfil (índice 3)
     final bool isProfile = _currentIndex == 3;
 
     return Scaffold(
       body: _screens.isNotEmpty
           ? _screens[_currentIndex]
-          : const Center(child: Text('Insira as telas na lista _screens')),
-
+          : const Center(
+              child: Text('Insira as telas na lista _screens'),
+            ), //[cite: 5]
       // Botão Central Flutuante (Some se estiver na aba Perfil)
       floatingActionButton: isProfile
           ? null
@@ -45,9 +70,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             ),
       floatingActionButtonLocation: isProfile
           ? null
-          : FloatingActionButtonLocation.centerDocked,
-
-      // Barra de navegação inferior
+          : FloatingActionButtonLocation.centerDocked, //[cite: 5]
+      // Barra de navegação inferior com Expanded para evitar overflow
       bottomNavigationBar: BottomAppBar(
         shape: isProfile ? null : const CircularNotchedRectangle(),
         notchMargin: 8.0,
@@ -57,33 +81,41 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              navBarItem(
-                icon: Icons.home_outlined,
-                selectedIcon: Icons.home,
-                label: 'Início',
-                index: 0,
+              Expanded(
+                child: navBarItem(
+                  icon: Icons.home_outlined,
+                  selectedIcon: Icons.home,
+                  label: 'Início',
+                  index: 0,
+                ),
               ),
-              navBarItem(
-                icon: Icons.bar_chart_outlined,
-                selectedIcon: Icons.bar_chart,
-                label: 'Progresso',
-                index: 1,
+              Expanded(
+                child: navBarItem(
+                  icon: Icons.bar_chart_outlined,
+                  selectedIcon: Icons.bar_chart,
+                  label: 'Progresso',
+                  index: 1,
+                ),
               ),
 
-              // O espaço reservado só existe nas outras abas
-              if (!isProfile) const SizedBox(width: 40),
+              // O espaço reservado só existe nas outras abas para acomodar o FAB
+              if (!isProfile) const SizedBox(width: 32),
 
-              navBarItem(
-                icon: Icons.history_outlined,
-                selectedIcon: Icons.history,
-                label: 'Histórico',
-                index: 2,
+              Expanded(
+                child: navBarItem(
+                  icon: Icons.history_outlined,
+                  selectedIcon: Icons.history,
+                  label: 'Histórico',
+                  index: 2,
+                ),
               ),
-              navBarItem(
-                icon: Icons.person_outline,
-                selectedIcon: Icons.person,
-                label: 'Perfil',
-                index: 3,
+              Expanded(
+                child: navBarItem(
+                  icon: Icons.person_outline,
+                  selectedIcon: Icons.person,
+                  label: 'Perfil',
+                  index: 3,
+                ),
               ),
             ],
           ),

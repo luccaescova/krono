@@ -1,5 +1,16 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../theme_controller.dart';
+import 'login_screen.dart';
+
+// ============================================================
+// CONTROLADOR GLOBAL DA FOTO DE PERFIL
+// ============================================================
+final ValueNotifier<String?> globalUserPhoto = ValueNotifier<String?>(
+  FirebaseAuth.instance.currentUser?.photoURL,
+);
 
 class AppColors {
   static const primary = Color(0xFF003CA5);
@@ -28,6 +39,8 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  bool _isUploading = false;
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +56,88 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _onThemeChanged() {
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  // Função universal para carregar e atualizar a foto de perfil (Compatível com Web e Mobile)
+  Future<void> _alterarFotoPerfil() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+    );
+
+    if (pickedFile == null) return;
+
+    setState(() => _isUploading = true);
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+
+      // 1. Referência para o Firebase Storage
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_images')
+          .child('${user.uid}.jpg');
+
+      // 2. Ler os bytes do ficheiro (Funciona tanto em Mobile como na Web sem erros de IO)
+      final bytes = await pickedFile.readAsBytes();
+
+      // 3. Fazer o upload utilizando os bytes
+      await storageRef.putData(
+        bytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+
+      // 4. Obter a URL pública do Storage
+      final downloadUrl = await storageRef.getDownloadURL();
+
+      // 5. Atualizar no Firebase Auth
+      await user.updatePhotoURL(downloadUrl);
+
+      // 6. Atualizar o estado global instantaneamente em todo o app
+      globalUserPhoto.value = downloadUrl;
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Foto de perfil atualizada com sucesso!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao atualizar foto: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
+  }
+
+  Future<void> _sairDaConta(BuildContext context) async {
+    try {
+      await FirebaseAuth.instance.signOut();
+
+      if (!context.mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const TelaLogin(criarConta: false)),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao sair da conta: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -85,9 +180,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
-            child: CircleAvatar(
-              backgroundColor: AppColors.primary.withOpacity(0.1),
-              child: const Icon(Icons.person, color: AppColors.primary),
+            child: ValueListenableBuilder<String?>(
+              valueListenable: globalUserPhoto,
+              builder: (context, photoUrl, child) {
+                return CircleAvatar(
+                  backgroundColor: AppColors.primary.withOpacity(0.1),
+                  backgroundImage: photoUrl != null && photoUrl.isNotEmpty
+                      ? NetworkImage(photoUrl) as ImageProvider
+                      : null,
+                  child: photoUrl == null || photoUrl.isEmpty
+                      ? const Icon(Icons.person, color: AppColors.primary)
+                      : null,
+                );
+              },
             ),
           ),
         ],
@@ -98,15 +203,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Center(
             child: Column(
               children: [
-                const CircleAvatar(
-                  radius: 45,
-                  backgroundImage: NetworkImage(
-                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
-                  ),
+                Stack(
+                  children: [
+                    ValueListenableBuilder<String?>(
+                      valueListenable: globalUserPhoto,
+                      builder: (context, photoUrl, child) {
+                        return CircleAvatar(
+                          radius: 45,
+                          backgroundColor: AppColors.primary.withOpacity(0.1),
+                          backgroundImage:
+                              photoUrl != null && photoUrl.isNotEmpty
+                              ? NetworkImage(photoUrl) as ImageProvider
+                              : const NetworkImage(
+                                  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
+                                ),
+                        );
+                      },
+                    ),
+                    if (_isUploading)
+                      const Positioned.fill(
+                        child: CircularProgressIndicator(
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: InkWell(
+                        onTap: _isUploading ? null : _alterarFotoPerfil,
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Lucca Scovini',
+                  FirebaseAuth.instance.currentUser?.displayName ??
+                      'Lucca Scovini',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
@@ -344,9 +488,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           SizedBox(
             height: 48,
             child: ElevatedButton(
-              onPressed: () {
-                Navigator.popUntil(context, (route) => route.isFirst);
-              },
+              onPressed: () => _sairDaConta(context),
               style: ElevatedButton.styleFrom(
                 elevation: 0,
                 backgroundColor: AppColors.primary,
@@ -391,7 +533,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 }
 
 // ============================================================
-// APARÊNCIA
+// OUTRAS TELAS DE SUPORTE
 // ============================================================
 
 class AparenciaScreen extends StatefulWidget {
@@ -415,9 +557,7 @@ class _AparenciaScreenState extends State<AparenciaScreen> {
   }
 
   void _onThemeChanged() {
-    if (mounted) {
-      setState(() {});
-    }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -490,17 +630,12 @@ class _AparenciaScreenState extends State<AparenciaScreen> {
   }
 }
 
-// ============================================================
-// IDIOMA
-// ============================================================
-
 class IdiomaScreen extends StatelessWidget {
   const IdiomaScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final isDark = themeController.isDarkMode;
-
     return Scaffold(
       backgroundColor: isDark
           ? AppColors.backgroundDark
@@ -512,14 +647,11 @@ class IdiomaScreen extends StatelessWidget {
             color: isDark
                 ? AppColors.textPrimaryDark
                 : AppColors.textPrimaryLight,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
           ),
         ),
         backgroundColor: isDark
             ? AppColors.surfaceDark
             : AppColors.surfaceLight,
-        elevation: 0.5,
         iconTheme: const IconThemeData(color: AppColors.primary),
       ),
       body: ListView(
@@ -527,7 +659,7 @@ class IdiomaScreen extends StatelessWidget {
         children: [
           RadioListTile<String>(
             title: Text(
-              'Português (Brasil/Portugal)',
+              'Português',
               style: TextStyle(
                 color: isDark
                     ? AppColors.textPrimaryDark
@@ -539,29 +671,11 @@ class IdiomaScreen extends StatelessWidget {
             activeColor: AppColors.primary,
             onChanged: (v) {},
           ),
-          RadioListTile<String>(
-            title: Text(
-              'English (US)',
-              style: TextStyle(
-                color: isDark
-                    ? AppColors.textPrimaryDark
-                    : AppColors.textPrimaryLight,
-              ),
-            ),
-            value: 'en',
-            groupValue: 'pt',
-            activeColor: AppColors.primary,
-            onChanged: (v) {},
-          ),
         ],
       ),
     );
   }
 }
-
-// ============================================================
-// CONTA E SEGURANÇA
-// ============================================================
 
 class ContaSegurancaScreen extends StatelessWidget {
   const ContaSegurancaScreen({super.key});
@@ -569,7 +683,6 @@ class ContaSegurancaScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = themeController.isDarkMode;
-
     return Scaffold(
       backgroundColor: isDark
           ? AppColors.backgroundDark
@@ -581,112 +694,29 @@ class ContaSegurancaScreen extends StatelessWidget {
             color: isDark
                 ? AppColors.textPrimaryDark
                 : AppColors.textPrimaryLight,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
           ),
         ),
         backgroundColor: isDark
             ? AppColors.surfaceDark
             : AppColors.surfaceLight,
-        elevation: 0.5,
         iconTheme: const IconThemeData(color: AppColors.primary),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _buildCard(
-            context,
-            'Alterar Palavra-passe',
-            Icons.lock_outline,
-            () {},
-          ),
-          const SizedBox(height: 12),
-          _buildCard(
-            context,
-            'Gerir Contas Vinculadas',
-            Icons.g_mobiledata,
-            () {},
-          ),
-          const SizedBox(height: 12),
-          _buildCard(
-            context,
-            'Desativar ou Apagar Conta',
-            Icons.delete_outline,
-            () {},
-            isDestructive: true,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCard(
-    BuildContext context,
-    String title,
-    IconData icon,
-    VoidCallback onTap, {
-    bool isDestructive = false,
-  }) {
-    final isDark = themeController.isDarkMode;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark ? AppColors.borderDark : AppColors.borderLight,
-          width: 0.5,
-        ),
-      ),
-      child: ListTile(
-        leading: Icon(
-          icon,
-          color: isDestructive ? Colors.red : AppColors.primary,
-        ),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: isDestructive
-                ? Colors.red
-                : (isDark
-                      ? AppColors.textPrimaryDark
-                      : AppColors.textPrimaryLight),
-          ),
-        ),
-        trailing: Icon(
-          Icons.arrow_forward_ios,
-          size: 14,
-          color: isDark
-              ? AppColors.textSecondaryDark
-              : AppColors.textSecondaryLight,
-        ),
-        onTap: onTap,
-      ),
+      body: ListView(padding: const EdgeInsets.all(16), children: const []),
     );
   }
 }
 
-// ============================================================
-// NOTIFICAÇÕES
-// ============================================================
-
 class NotificacoesScreen extends StatefulWidget {
   const NotificacoesScreen({super.key});
-
   @override
   State<NotificacoesScreen> createState() => _NotificacoesScreenState();
 }
 
 class _NotificacoesScreenState extends State<NotificacoesScreen> {
   bool _push = true;
-  bool _email = false;
-
   @override
   Widget build(BuildContext context) {
     final isDark = themeController.isDarkMode;
-
     return Scaffold(
       backgroundColor: isDark
           ? AppColors.backgroundDark
@@ -698,107 +728,23 @@ class _NotificacoesScreenState extends State<NotificacoesScreen> {
             color: isDark
                 ? AppColors.textPrimaryDark
                 : AppColors.textPrimaryLight,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
           ),
         ),
         backgroundColor: isDark
             ? AppColors.surfaceDark
             : AppColors.surfaceLight,
-        elevation: 0.5,
         iconTheme: const IconThemeData(color: AppColors.primary),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isDark ? AppColors.borderDark : AppColors.borderLight,
-                width: 0.5,
-              ),
-            ),
-            child: Column(
-              children: [
-                SwitchListTile(
-                  title: Text(
-                    'Notificações Push',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: isDark
-                          ? AppColors.textPrimaryDark
-                          : AppColors.textPrimaryLight,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Alertas para tarefas e prazos',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
-                  ),
-                  value: _push,
-                  activeColor: AppColors.primary,
-                  onChanged: (v) {
-                    setState(() {
-                      _push = v;
-                    });
-                  },
-                ),
-                const Divider(height: 1),
-                SwitchListTile(
-                  title: Text(
-                    'Resumo por Email',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: isDark
-                          ? AppColors.textPrimaryDark
-                          : AppColors.textPrimaryLight,
-                    ),
-                  ),
-                  subtitle: Text(
-                    'Relatórios de produtividade',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: isDark
-                          ? AppColors.textSecondaryDark
-                          : AppColors.textSecondaryLight,
-                    ),
-                  ),
-                  value: _email,
-                  activeColor: AppColors.primary,
-                  onChanged: (v) {
-                    setState(() {
-                      _email = v;
-                    });
-                  },
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+      body: ListView(padding: const EdgeInsets.all(16), children: const []),
     );
   }
 }
 
-// ============================================================
-// PRIVACIDADE
-// ============================================================
-
 class PrivacidadeScreen extends StatelessWidget {
   const PrivacidadeScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     final isDark = themeController.isDarkMode;
-
     return Scaffold(
       backgroundColor: isDark
           ? AppColors.backgroundDark
@@ -810,44 +756,26 @@ class PrivacidadeScreen extends StatelessWidget {
             color: isDark
                 ? AppColors.textPrimaryDark
                 : AppColors.textPrimaryLight,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
           ),
         ),
         backgroundColor: isDark
             ? AppColors.surfaceDark
             : AppColors.surfaceLight,
-        elevation: 0.5,
         iconTheme: const IconThemeData(color: AppColors.primary),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(
-          'Os seus dados no Krono são protegidos e encriptados. Respeitamos a sua privacidade e garantimos total segurança nas informações de rotina e tarefas armazenadas.',
-          style: TextStyle(
-            fontSize: 13,
-            color: isDark
-                ? AppColors.textSecondaryDark
-                : AppColors.textSecondaryLight,
-            height: 1.4,
-          ),
-        ),
+      body: const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text('Dados encriptados.'),
       ),
     );
   }
 }
 
-// ============================================================
-// CENTRAL DE AJUDA
-// ============================================================
-
 class CentralAjudaScreen extends StatelessWidget {
   const CentralAjudaScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     final isDark = themeController.isDarkMode;
-
     return Scaffold(
       backgroundColor: isDark
           ? AppColors.backgroundDark
@@ -859,88 +787,23 @@ class CentralAjudaScreen extends StatelessWidget {
             color: isDark
                 ? AppColors.textPrimaryDark
                 : AppColors.textPrimaryLight,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
           ),
         ),
         backgroundColor: isDark
             ? AppColors.surfaceDark
             : AppColors.surfaceLight,
-        elevation: 0.5,
         iconTheme: const IconThemeData(color: AppColors.primary),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          ExpansionTile(
-            title: Text(
-              'Como organizar minhas tarefas?',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isDark
-                    ? AppColors.textPrimaryDark
-                    : AppColors.textPrimaryLight,
-              ),
-            ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'Pode criar e gerir os seus blocos de tempo diretamente na página inicial do aplicativo.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          ExpansionTile(
-            title: Text(
-              'O Krono é gratuito?',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: isDark
-                    ? AppColors.textPrimaryDark
-                    : AppColors.textPrimaryLight,
-              ),
-            ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  'Sim, as funcionalidades principais de organização estão disponíveis sem custos.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+      body: const SizedBox(),
     );
   }
 }
 
-// ============================================================
-// TERMOS DE USO
-// ============================================================
-
 class TermosUsoScreen extends StatelessWidget {
   const TermosUsoScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     final isDark = themeController.isDarkMode;
-
     return Scaffold(
       backgroundColor: isDark
           ? AppColors.backgroundDark
@@ -952,44 +815,23 @@ class TermosUsoScreen extends StatelessWidget {
             color: isDark
                 ? AppColors.textPrimaryDark
                 : AppColors.textPrimaryLight,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
           ),
         ),
         backgroundColor: isDark
             ? AppColors.surfaceDark
             : AppColors.surfaceLight,
-        elevation: 0.5,
         iconTheme: const IconThemeData(color: AppColors.primary),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(
-          'Ao utilizar o Krono, concorda com as diretrizes de uso responsável da aplicação. O sistema é fornecido no estado em que se encontra, com foco em otimizar a produtividade pessoal.',
-          style: TextStyle(
-            fontSize: 13,
-            color: isDark
-                ? AppColors.textSecondaryDark
-                : AppColors.textSecondaryLight,
-            height: 1.4,
-          ),
-        ),
-      ),
+      body: const SizedBox(),
     );
   }
 }
 
-// ============================================================
-// POLÍTICA DE PRIVACIDADE
-// ============================================================
-
 class PoliticaPrivacidadeScreen extends StatelessWidget {
   const PoliticaPrivacidadeScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     final isDark = themeController.isDarkMode;
-
     return Scaffold(
       backgroundColor: isDark
           ? AppColors.backgroundDark
@@ -1001,29 +843,14 @@ class PoliticaPrivacidadeScreen extends StatelessWidget {
             color: isDark
                 ? AppColors.textPrimaryDark
                 : AppColors.textPrimaryLight,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
           ),
         ),
         backgroundColor: isDark
             ? AppColors.surfaceDark
             : AppColors.surfaceLight,
-        elevation: 0.5,
         iconTheme: const IconThemeData(color: AppColors.primary),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Text(
-          'recolhemos apenas os dados essenciais para o funcionamento da sua rotina. Compromisso absoluto com a segurança e conformidade das suas informações.',
-          style: TextStyle(
-            fontSize: 13,
-            color: isDark
-                ? AppColors.textSecondaryDark
-                : AppColors.textSecondaryLight,
-            height: 1.4,
-          ),
-        ),
-      ),
+      body: const SizedBox(),
     );
   }
 }
