@@ -1,8 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'presentation/screens/main_navigation_screen.dart';
+import 'presentation/screens/login_screen.dart';
 import 'theme_controller.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   runApp(const KronoApp());
 }
 
@@ -44,9 +51,23 @@ class KronoApp extends StatelessWidget {
               ? ThemeMode.dark
               : ThemeMode.light,
 
-          home: const MainNavigationScreen(),
+          // Tela inicial de roteamento que decide se o utilizador vai para o login ou para o app principal
+          home: const InitialAuthWrapper(),
         );
       },
     );
+  }
+}
+
+/// Widget responsável por verificar o estado de autenticação inicial
+/// e fazer a transição correta entre a tela de login e o app principal.
+class InitialAuthWrapper extends StatelessWidget {
+  const InitialAuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Você pode substituir por um StreamBuilder ouvindo FirebaseAuth.instance.authStateChanges()
+    // para persistir a sessão automaticamente, ou retornar a sua tela inicial/login desejada.
+    return const TelaLogin();
   }
 }

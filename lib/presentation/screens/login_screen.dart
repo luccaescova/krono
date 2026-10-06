@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Importação do Firebase Auth
 import 'main_navigation_screen.dart';
 
 class AppColors {
@@ -47,10 +48,6 @@ class _TelaLoginState extends State<TelaLogin> {
   @override
   void initState() {
     super.initState();
-
-    // IMPORTANTE:
-    // Se TelaLogin(criarConta: true), abre cadastro.
-    // Se TelaLogin(), abre login.
     _criarConta = widget.criarConta;
   }
 
@@ -66,10 +63,10 @@ class _TelaLoginState extends State<TelaLogin> {
   }
 
   // ============================================================
-  // LOGIN
+  // LOGIN (FIREBASE)
   // ============================================================
 
-  void _entrar() {
+  Future<void> _entrar() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -80,46 +77,58 @@ class _TelaLoginState extends State<TelaLogin> {
       _carregando = true;
     });
 
-    Future.delayed(const Duration(seconds: 1), () {
-      if (!mounted) return;
-
-      setState(() {
-        _carregando = false;
-      });
-
+    try {
       final email = _emailController.text.trim();
       final senha = _senhaController.text;
 
-      // LOGIN TEMPORÁRIO
-      if (email == 'admin.com' && senha == 'admin123') {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Login efetuado com sucesso!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+      // Autenticação real com o Firebase
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: senha,
+      );
 
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-          (route) => false,
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Credenciais inválidas. Use admin.com e admin123'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Login efetuado com sucesso!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+        (route) => false,
+      );
+    } on FirebaseAuthException catch (e) {
+      String mensagemErro = 'Erro ao efetuar login.';
+      if (e.code == 'user-not-found') {
+        mensagemErro = 'Utilizador não encontrado.';
+      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        mensagemErro = 'E-mail ou senha incorretos.';
+      } else if (e.code == 'invalid-email') {
+        mensagemErro = 'O formato do e-mail é inválido.';
       }
-    });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mensagemErro), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _carregando = false;
+        });
+      }
+    }
   }
 
   // ============================================================
-  // CRIAR CONTA
+  // CRIAR CONTA (FIREBASE)
   // ============================================================
 
-  void _criarNovaConta() {
+  Future<void> _criarNovaConta() async {
     if (!_formKey.currentState!.validate()) {
       return;
     }
@@ -132,7 +141,6 @@ class _TelaLoginState extends State<TelaLogin> {
           ),
         ),
       );
-
       return;
     }
 
@@ -142,12 +150,22 @@ class _TelaLoginState extends State<TelaLogin> {
       _carregando = true;
     });
 
-    Future.delayed(const Duration(seconds: 1), () {
-      if (!mounted) return;
+    try {
+      final email = _emailController.text.trim();
+      final senha = _senhaController.text;
 
-      setState(() {
-        _carregando = false;
-      });
+      // Criação real de conta no Firebase
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: senha);
+
+      // Atualiza o nome de exibição do utilizador se preenchido
+      if (_nomeController.text.trim().isNotEmpty) {
+        await userCredential.user?.updateDisplayName(
+          _nomeController.text.trim(),
+        );
+      }
+
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -156,16 +174,32 @@ class _TelaLoginState extends State<TelaLogin> {
         ),
       );
 
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
+        (route) => false,
+      );
+    } on FirebaseAuthException catch (e) {
+      String mensagemErro = 'Erro ao criar conta.';
+      if (e.code == 'weak-password') {
+        mensagemErro = 'A senha fornecida é muito fraca.';
+      } else if (e.code == 'email-already-in-use') {
+        mensagemErro = 'Já existe uma conta com este e-mail.';
+      } else if (e.code == 'invalid-email') {
+        mensagemErro = 'O formato do e-mail é inválido.';
+      }
 
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
-          (route) => false,
-        );
-      });
-    });
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mensagemErro), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _carregando = false;
+        });
+      }
+    }
   }
 
   // ============================================================
@@ -207,37 +241,29 @@ class _TelaLoginState extends State<TelaLogin> {
   }
 
   // ============================================================
-  // IR PARA CRIAR CONTA
+  // IR PARA CRIAR CONTA / LOGIN
   // ============================================================
 
   void _irParaCriarConta() {
     setState(() {
       _criarConta = true;
-
       _nomeController.clear();
       _dataNascimentoController.clear();
       _senhaController.clear();
       _confirmarSenhaController.clear();
-
       _aceitouTermos = false;
       _mostrarSenha = false;
       _mostrarConfirmarSenha = false;
     });
   }
 
-  // ============================================================
-  // IR PARA LOGIN
-  // ============================================================
-
   void _irParaLogin() {
     setState(() {
       _criarConta = false;
-
       _nomeController.clear();
       _dataNascimentoController.clear();
       _senhaController.clear();
       _confirmarSenhaController.clear();
-
       _aceitouTermos = false;
       _mostrarSenha = false;
       _mostrarConfirmarSenha = false;
@@ -275,11 +301,7 @@ class _TelaLoginState extends State<TelaLogin> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // --------------------------------------------------
-              // VOLTAR
-              // --------------------------------------------------
               const SizedBox(height: 10),
-
               Align(
                 alignment: Alignment.centerLeft,
                 child: GestureDetector(
@@ -294,12 +316,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 30),
-
-              // --------------------------------------------------
-              // LOGO
-              // --------------------------------------------------
               Center(
                 child: Image.asset(
                   'assets/images/logo.png',
@@ -315,12 +332,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   },
                 ),
               ),
-
               const SizedBox(height: 25),
-
-              // --------------------------------------------------
-              // TÍTULO
-              // --------------------------------------------------
               const Text(
                 'Entre na sua conta',
                 textAlign: TextAlign.center,
@@ -331,9 +343,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   color: AppColors.textPrimary,
                 ),
               ),
-
               const SizedBox(height: 8),
-
               const Text(
                 'Organize seu tempo do seu jeito',
                 textAlign: TextAlign.center,
@@ -344,12 +354,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   color: AppColors.textSecondary,
                 ),
               ),
-
               const SizedBox(height: 45),
-
-              // --------------------------------------------------
-              // E-MAIL
-              // --------------------------------------------------
               const Text(
                 'E-mail',
                 style: TextStyle(
@@ -358,9 +363,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   color: AppColors.textPrimary,
                 ),
               ),
-
               const SizedBox(height: 10),
-
               _CampoFigma(
                 controller: _emailController,
                 hintText: 'Digite seu e-mail',
@@ -370,20 +373,13 @@ class _TelaLoginState extends State<TelaLogin> {
                   if (valor == null || valor.trim().isEmpty) {
                     return 'Digite seu e-mail';
                   }
-
                   if (!valor.contains('@')) {
                     return 'Digite um e-mail válido';
                   }
-
                   return null;
                 },
               ),
-
               const SizedBox(height: 27),
-
-              // --------------------------------------------------
-              // SENHA
-              // --------------------------------------------------
               const Text(
                 'Senha',
                 style: TextStyle(
@@ -392,9 +388,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   color: AppColors.textPrimary,
                 ),
               ),
-
               const SizedBox(height: 10),
-
               _CampoFigma(
                 controller: _senhaController,
                 hintText: 'Digite sua senha',
@@ -409,16 +403,10 @@ class _TelaLoginState extends State<TelaLogin> {
                   if (valor == null || valor.isEmpty) {
                     return 'Digite sua senha';
                   }
-
                   return null;
                 },
               ),
-
               const SizedBox(height: 12),
-
-              // --------------------------------------------------
-              // ESQUECEU A SENHA
-              // --------------------------------------------------
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
@@ -438,12 +426,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // --------------------------------------------------
-              // BOTÃO ENTRAR
-              // --------------------------------------------------
               SizedBox(
                 height: 58,
                 child: ElevatedButton(
@@ -475,12 +458,7 @@ class _TelaLoginState extends State<TelaLogin> {
                         ),
                 ),
               ),
-
               const SizedBox(height: 25),
-
-              // --------------------------------------------------
-              // CRIAR CONTA
-              // --------------------------------------------------
               Center(
                 child: GestureDetector(
                   onTap: _irParaCriarConta,
@@ -494,7 +472,6 @@ class _TelaLoginState extends State<TelaLogin> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 30),
             ],
           ),
@@ -517,11 +494,7 @@ class _TelaLoginState extends State<TelaLogin> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // --------------------------------------------------
-              // VOLTAR
-              // --------------------------------------------------
               const SizedBox(height: 10),
-
               Align(
                 alignment: Alignment.centerLeft,
                 child: GestureDetector(
@@ -536,12 +509,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 4),
-
-              // --------------------------------------------------
-              // LOGO
-              // --------------------------------------------------
               Center(
                 child: Image.asset(
                   'assets/images/logo.png',
@@ -557,12 +525,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   },
                 ),
               ),
-
               const SizedBox(height: 20),
-
-              // --------------------------------------------------
-              // TÍTULO
-              // --------------------------------------------------
               const Text(
                 'Crie sua conta',
                 textAlign: TextAlign.center,
@@ -573,9 +536,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   color: AppColors.textPrimary,
                 ),
               ),
-
               const SizedBox(height: 8),
-
               const Text(
                 'Organize seu tempo do seu jeito',
                 textAlign: TextAlign.center,
@@ -586,12 +547,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   color: AppColors.textSecondary,
                 ),
               ),
-
               const SizedBox(height: 44),
-
-              // --------------------------------------------------
-              // NOME
-              // --------------------------------------------------
               const Text(
                 'Nome',
                 style: TextStyle(
@@ -600,9 +556,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   color: AppColors.textPrimary,
                 ),
               ),
-
               const SizedBox(height: 10),
-
               _CampoFigma(
                 controller: _nomeController,
                 hintText: 'Digite seu nome',
@@ -611,16 +565,10 @@ class _TelaLoginState extends State<TelaLogin> {
                   if (valor == null || valor.trim().isEmpty) {
                     return 'Digite seu nome';
                   }
-
                   return null;
                 },
               ),
-
               const SizedBox(height: 27),
-
-              // --------------------------------------------------
-              // E-MAIL
-              // --------------------------------------------------
               const Text(
                 'E-mail',
                 style: TextStyle(
@@ -629,9 +577,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   color: AppColors.textPrimary,
                 ),
               ),
-
               const SizedBox(height: 10),
-
               _CampoFigma(
                 controller: _emailController,
                 hintText: 'Digite seu e-mail',
@@ -641,20 +587,13 @@ class _TelaLoginState extends State<TelaLogin> {
                   if (valor == null || valor.trim().isEmpty) {
                     return 'Digite seu e-mail';
                   }
-
                   if (!valor.contains('@')) {
                     return 'Digite um e-mail válido';
                   }
-
                   return null;
                 },
               ),
-
               const SizedBox(height: 27),
-
-              // --------------------------------------------------
-              // DATA DE NASCIMENTO
-              // --------------------------------------------------
               const Text(
                 'Data de nascimento',
                 style: TextStyle(
@@ -663,9 +602,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   color: AppColors.textPrimary,
                 ),
               ),
-
               const SizedBox(height: 10),
-
               GestureDetector(
                 onTap: _selecionarDataNascimento,
                 child: AbsorbPointer(
@@ -678,18 +615,12 @@ class _TelaLoginState extends State<TelaLogin> {
                       if (valor == null || valor.trim().isEmpty) {
                         return 'Selecione sua data de nascimento';
                       }
-
                       return null;
                     },
                   ),
                 ),
               ),
-
               const SizedBox(height: 27),
-
-              // --------------------------------------------------
-              // SENHA
-              // --------------------------------------------------
               const Text(
                 'Senha',
                 style: TextStyle(
@@ -698,9 +629,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   color: AppColors.textPrimary,
                 ),
               ),
-
               const SizedBox(height: 10),
-
               _CampoFigma(
                 controller: _senhaController,
                 hintText: 'Digite sua senha',
@@ -715,20 +644,13 @@ class _TelaLoginState extends State<TelaLogin> {
                   if (valor == null || valor.isEmpty) {
                     return 'Digite sua senha';
                   }
-
                   if (valor.length < 6) {
                     return 'A senha deve ter pelo menos 6 caracteres';
                   }
-
                   return null;
                 },
               ),
-
               const SizedBox(height: 27),
-
-              // --------------------------------------------------
-              // CONFIRMAR SENHA
-              // --------------------------------------------------
               const Text(
                 'Confirmar senha',
                 style: TextStyle(
@@ -737,9 +659,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   color: AppColors.textPrimary,
                 ),
               ),
-
               const SizedBox(height: 10),
-
               _CampoFigma(
                 controller: _confirmarSenhaController,
                 hintText: 'Digite novamente sua senha',
@@ -754,20 +674,13 @@ class _TelaLoginState extends State<TelaLogin> {
                   if (valor == null || valor.isEmpty) {
                     return 'Confirme sua senha';
                   }
-
                   if (valor != _senhaController.text) {
                     return 'As senhas não coincidem';
                   }
-
                   return null;
                 },
               ),
-
               const SizedBox(height: 34),
-
-              // --------------------------------------------------
-              // TERMOS
-              // --------------------------------------------------
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -789,9 +702,7 @@ class _TelaLoginState extends State<TelaLogin> {
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                   ),
-
                   const SizedBox(width: 8),
-
                   const Expanded(
                     child: Text(
                       'Concordo com os Termos de Uso e Política de Privacidade',
@@ -805,12 +716,7 @@ class _TelaLoginState extends State<TelaLogin> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 28),
-
-              // --------------------------------------------------
-              // BOTÃO CRIAR CONTA
-              // --------------------------------------------------
               SizedBox(
                 height: 58,
                 child: ElevatedButton(
@@ -842,12 +748,7 @@ class _TelaLoginState extends State<TelaLogin> {
                         ),
                 ),
               ),
-
               const SizedBox(height: 25),
-
-              // --------------------------------------------------
-              // IR PARA LOGIN
-              // --------------------------------------------------
               Center(
                 child: GestureDetector(
                   onTap: _irParaLogin,
@@ -861,7 +762,6 @@ class _TelaLoginState extends State<TelaLogin> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 30),
             ],
           ),
@@ -910,17 +810,13 @@ class _CampoFigma extends StatelessWidget {
       decoration: InputDecoration(
         filled: true,
         fillColor: Colors.white,
-
         hintText: hintText,
-
         hintStyle: const TextStyle(
           fontSize: 17,
           fontWeight: FontWeight.w400,
           color: Color(0xFF5E5A63),
         ),
-
         prefixIcon: Icon(icon, size: 25, color: const Color(0xFF57525B)),
-
         suffixIcon: onTogglePassword != null
             ? IconButton(
                 onPressed: onTogglePassword,
@@ -934,37 +830,30 @@ class _CampoFigma extends StatelessWidget {
                 ),
               )
             : null,
-
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 18,
           vertical: 19,
         ),
-
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(17),
           borderSide: const BorderSide(color: AppColors.border, width: 1),
         ),
-
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(17),
           borderSide: const BorderSide(color: AppColors.border, width: 1),
         ),
-
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(17),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
-
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(17),
           borderSide: const BorderSide(color: Colors.redAccent, width: 1),
         ),
-
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(17),
           borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
         ),
-
         errorStyle: const TextStyle(fontSize: 11),
       ),
     );
